@@ -52,11 +52,9 @@ class DataCalculationTask:
             for hour in hours:
                 if float(hour['hour']) >= 9.0 and float(hour['hour']) <= 19.0:
                     condition = hour['condition']
-                    if condition is not PRECIPITATIOM:
+                    if condition not in PRECIPITATIOM:
                         result_precipitation.append(condition)
-
                     error_date.append(condition)
-        print(len(result_precipitation))
         return len(result_precipitation)
 
     def get_averge_temp(cities_data):
@@ -73,30 +71,45 @@ class DataCalculationTask:
 
         return round(sum(result_temp) / len(result_temp), 2)
 
+    def favorable_city(cities_data):
+        temps = []
+        result_condition = []
+        dates = []
+        days = cities_data["forecasts"]
+        result = []
+
+        for day in days:
+            hours = day['hours']
+            dates.append(day['date'])
+
+            for hour in hours:
+                if float(hour['hour']) >= 9.0 and float(hour['hour']) <= 19:
+                    temp = hour['temp']
+                    condition = hour['condition']
+                    temps.append(temp)
+
+                    if condition not in PRECIPITATIOM:
+                        result_condition.append(condition)
+
+        result.append(sum(temps))
+        result.append(len(result_condition))
+        result.append(dates)
+        print(result)
+        return result
+
 
 class DataAggregationTask:
-    def __init__(self, average_temp, hours_without_precipitation, wather, city, date) -> None:
+    def __init__(self, average_temp, hours_without_precipitation, city, date) -> None:
         self.average_temp = average_temp
         self.hours_without_precipitation = hours_without_precipitation
-        self.wather = wather
         self.city = city
         self.date = date
 
-    def combining_data(self):
-        self.wather = DataFetchingTask.get_wather()
-        self.average_temp = DataCalculationTask.get_averge_temp(self.wather)
-        self.hours_without_precipitation = DataCalculationTask.view_precipitation(
-            self.wather)
-
-    def __str__(self):
-        return f'Средняя температура за период с 9 до 19 {self.average_temp}. Время без осадков составило: {self.hours_without_precipitation}'
-
+    def aggregate_data(self):
+        return 'Город: {CITY}'
 
 class DataAnalyzingTask:
     pass
-
-
-# DataCalculationTask.get_averge_temp(DataFetchingTask.get_wather()['MOSCOW'])
 
 
 @dataclass
@@ -111,8 +124,10 @@ def main():
     data = DataFetchingTask.get_wather()
     result_process_1 = {}
     result_process_2 = {}
+    result_process_3 = {}
     result_1 = {}
     result_2 = {}
+    result_3 = {}
 
     with concurrent.futures.ProcessPoolExecutor() as pool:
         for city, api_data in data.items():
@@ -120,9 +135,12 @@ def main():
                 DataCalculationTask.get_averge_temp, api_data)
             process_2 = pool.submit(
                 DataCalculationTask.view_precipitation, api_data)
+            process_3 = pool.submit(
+                DataCalculationTask.favorable_city, api_data)
 
             result_process_1[city] = process_1
             result_process_2[city] = process_2
+            result_process_3[city] = process_3
 
         for city, future in result_process_1.items():
             try:
@@ -135,8 +153,12 @@ def main():
                 result_2[city] = future.result()
             except Exception:
                 pass
-
-    print(result_2)
+        for city, future in result_process_3.items():
+            try:
+                result_3[city] = future.result()
+            except Exception:
+                pass
+    # print(result_3)
 
 
 if __name__ == '__main__':
