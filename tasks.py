@@ -1,13 +1,15 @@
-from dataclasses import dataclass
-import threading
-import multiprocessing
+import json
+import logging
 import concurrent.futures
 from external.client import YandexWeatherAPI
-from utils import get_url_by_city_name, CITIES
+from utils import CITIES
+
 
 PRECIPITATIOM = [
-    'drizzle', 'light-rain', 'rain', 'moderate-rain', 'heavy-rain', 'continuous-heavy-rain', 'showers',
-    'wet-snow', 'light-snow', 'snow' 'snow-showers', 'hail', 'thunderstorm' 'thunderstorm-with-rain', 'thunderstorm-with-hail'
+    'drizzle', 'light-rain', 'rain', 'moderate-rain',
+    'heavy-rain', 'continuous-heavy-rain', 'showers',
+    'wet-snow', 'light-snow', 'snow' 'snow-showers', 'hail',
+    'thunderstorm' 'thunderstorm-with-rain', 'thunderstorm-with-hail'
 ]
 
 
@@ -17,10 +19,6 @@ NOT_PRECIPITATIOM = [
 
 
 class DataFetchingTask:
-    def __init__(self, futures, result) -> None:
-        self.futures = futures
-        self.result = result
-
     def get_wather():
         futures = {}
         result = {}
@@ -39,10 +37,6 @@ class DataFetchingTask:
 
 
 class DataCalculationTask:
-    def __init__(self, result_precipitation, result_temp) -> None:
-        self.result_precipitation = result_precipitation
-        self.result_temp = result_temp
-
     def view_precipitation(wathers_days):
         days = wathers_days["forecasts"]
         result_precipitation = []
@@ -65,59 +59,52 @@ class DataCalculationTask:
             hours = day['hours']
 
             for hour in hours:
-                if float(hour['hour']) >= 9.0 and float(hour['hour']) <= 19:
+                if int(hour['hour']) >= 9 and int(hour['hour']) <= 19:
                     temp = hour['temp']
                     result_temp.append(temp)
 
         return round(sum(result_temp) / len(result_temp), 2)
 
-    def favorable_city(cities_data):
-        temps = []
-        result_condition = []
-        dates = []
+    def get_days(cities_data):
+        result_days = []
         days = cities_data["forecasts"]
-        result = []
-
         for day in days:
-            hours = day['hours']
-            dates.append(day['date'])
-
-            for hour in hours:
-                if float(hour['hour']) >= 9.0 and float(hour['hour']) <= 19:
-                    temp = hour['temp']
-                    condition = hour['condition']
-                    temps.append(temp)
-
-                    if condition not in PRECIPITATIOM:
-                        result_condition.append(condition)
-
-        result.append(sum(temps))
-        result.append(len(result_condition))
-        result.append(dates)
-        print(result)
-        return result
+            result_days.append(day['date'])
+        return result_days
 
 
 class DataAggregationTask:
-    def __init__(self, average_temp, hours_without_precipitation, city, date) -> None:
-        self.average_temp = average_temp
-        self.hours_without_precipitation = hours_without_precipitation
-        self.city = city
-        self.date = date
+    def aggregate_stats(temp, precipitation, days):
+        result = {}
+        for city in temp.keys():
+            result[city] = {
+                'avg_temp': temp.get(city),
+                'hour_not_precipitation': precipitation.get(city),
+                'days': days.get(city),
+            }
 
-    def aggregate_data(self):
-        return 'Город: {CITY}'
+        return result
+
 
 class DataAnalyzingTask:
-    pass
+    def analyzing_wather(aggregare_data):
+        result_avg_temp = {}
+        for city, data, in aggregare_data.items():
+            avg_temp = data['avg_temp']
+            result_avg_temp[city] = avg_temp
+        favorite_city = [(value, key)
+                         for key, value in result_avg_temp.items()]
+        result = max(favorite_city)
 
+        return {'лучшие погодные условия в городе': result}
 
-@dataclass
-class DataWather:
-    city: str
-    wather: dict
-    average_temp: float
-    view_precipitation: int
+    def save_result_json(aggragate_data, favorite_city):
+        with open('result.json', 'w') as fp:
+            try:
+                json.dump(aggragate_data, fp)
+                json.dump(favorite_city, fp)
+            finally:
+                fp.close()
 
 
 def main():
@@ -135,8 +122,7 @@ def main():
                 DataCalculationTask.get_averge_temp, api_data)
             process_2 = pool.submit(
                 DataCalculationTask.view_precipitation, api_data)
-            process_3 = pool.submit(
-                DataCalculationTask.favorable_city, api_data)
+            process_3 = pool.submit(DataCalculationTask.get_days, api_data)
 
             result_process_1[city] = process_1
             result_process_2[city] = process_2
@@ -158,8 +144,17 @@ def main():
                 result_3[city] = future.result()
             except Exception:
                 pass
-    # print(result_3)
+
+    data_aggragate = DataAggregationTask.aggregate_stats(
+        result_1, result_2, result_3)
+    favorite_city = DataAnalyzingTask.analyzing_wather(data_aggragate)
+    DataAnalyzingTask.save_result_json(data_aggragate, favorite_city)
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        handlers=[logging.StreamHandler(),
+                  logging.FileHandler(filename=__file__ + '.log',)])
     main()
