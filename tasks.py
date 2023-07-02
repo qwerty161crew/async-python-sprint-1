@@ -19,7 +19,7 @@ NOT_PRECIPITATIOM = [
 
 
 class DataFetchingTask:
-    def get_wather():
+    def get_wather() -> dict:
         futures = {}
         result = {}
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -37,21 +37,21 @@ class DataFetchingTask:
 
 
 class DataCalculationTask:
-    def view_precipitation(wathers_days):
+    def view_precipitation(wathers_days: dict) -> int:
         days = wathers_days["forecasts"]
         result_precipitation = []
         error_date = []
         for day in days:
             hours = day['hours']
             for hour in hours:
-                if float(hour['hour']) >= 9.0 and float(hour['hour']) <= 19.0:
+                if 9.0 <= float(hour['hour']) <= 19.0:
                     condition = hour['condition']
                     if condition not in PRECIPITATIOM:
                         result_precipitation.append(condition)
                     error_date.append(condition)
         return len(result_precipitation)
 
-    def get_averge_temp(cities_data):
+    def get_averge_temp(cities_data: dict) -> float:
         result_temp = []
         days = cities_data["forecasts"]
 
@@ -59,13 +59,13 @@ class DataCalculationTask:
             hours = day['hours']
 
             for hour in hours:
-                if int(hour['hour']) >= 9 and int(hour['hour']) <= 19:
+                if 9.0 <= float(hour['hour']) <= 19.0:
                     temp = hour['temp']
                     result_temp.append(temp)
 
         return round(sum(result_temp) / len(result_temp), 2)
 
-    def get_days(cities_data):
+    def get_days(cities_data: dict) -> dict:
         result_days = []
         days = cities_data["forecasts"]
         for day in days:
@@ -74,7 +74,7 @@ class DataCalculationTask:
 
 
 class DataAggregationTask:
-    def aggregate_stats(temp, precipitation, days):
+    def aggregate_stats(temp: dict, precipitation: dict, days: dict) -> dict:
         result = {}
         for city in temp.keys():
             result[city] = {
@@ -87,7 +87,7 @@ class DataAggregationTask:
 
 
 class DataAnalyzingTask:
-    def analyzing_wather(aggregare_data):
+    def analyzing_wather(aggregare_data: dict) -> dict:
         result_avg_temp = {}
         for city, data, in aggregare_data.items():
             avg_temp = data['avg_temp']
@@ -100,14 +100,13 @@ class DataAnalyzingTask:
 
     def save_result_json(aggragate_data, favorite_city):
         with open('result.json', 'w') as fp:
-            try:
-                json.dump(aggragate_data, fp)
-                json.dump(favorite_city, fp)
-            finally:
-                fp.close()
+            json.dump(aggragate_data, fp, indent=4)
+            json.dump(favorite_city, fp, indent=4)
 
 
-def main():
+def main() -> None:
+    # Одно замечание было без сообщения
+    # можете запустить код и посмотреть, правильно ли сделано?
     data = DataFetchingTask.get_wather()
     result_process_1 = {}
     result_process_2 = {}
@@ -131,18 +130,18 @@ def main():
         for city, future in result_process_1.items():
             try:
                 result_1[city] = future.result()
-            except Exception:
+            except KeyError:
                 pass
 
         for city, future in result_process_2.items():
             try:
                 result_2[city] = future.result()
-            except Exception:
+            except KeyError:
                 pass
         for city, future in result_process_3.items():
             try:
                 result_3[city] = future.result()
-            except Exception:
+            except KeyError:
                 pass
 
     data_aggragate = DataAggregationTask.aggregate_stats(
